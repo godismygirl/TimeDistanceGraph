@@ -14,17 +14,12 @@ var TDGraph = {
 
     setInitData : function(phaseArray){
         //求最大相位差 保存相位已运行时间初始值
-        var phaseOperated = [];
-        phaseArray.map(function(el){
-            phaseOperated.push(parseInt(el.operated));
-        })
-        this.data.phaseOperated = phaseOperated; //保存各相位已运行时间
-
-        this.setAxisYDivider();         //y轴相位绘制坐标
-        this.setPhaseLineShouldUpdate(phaseArray);     //各岔路口相位组是否更新指针数组
-        this.setPhaseGroupShouldSwap(phaseArray);
+        this.initAxisYDivider();         //y轴相位绘制坐标
+        this.initTotalPhaseDuration(phaseArray[0]);       //路口相位时间总长 t 
+        this.initPhaseLineShouldUpdate(phaseArray);     //各岔路口相位组是否更新指针数组
+        this.initPhaseGroupShouldSwap(phaseArray);
         this.setGreenPhaseShouldUpdate(phaseArray);
-        this.setTotalPhaseDuration(phaseArray[0]);      //路口相位时间总长 t 
+             
 
         //求展示完整相位集的x轴最大时间单位， x轴刻度1s对应的实际像素宽度
         var chartWidth = this.getCanvasWidth() - this.getPadding() * 2;
@@ -39,7 +34,22 @@ var TDGraph = {
         return this;
     },
 
-    setTotalPhaseDuration : function(singlePhaseArray){
+    initPhaseGroupShouldSwap : function(phaseArray){
+        this.data.phaseGroupShouldSwap = false;
+
+        var d = [];
+        phaseArray.map(function(el){
+            d.push(parseInt(el.operated));
+        });
+       var totalDuration = this.data.totalPhaseDuration;
+       
+       var maxDiff = Math.max.apply( null, d ) - Math.min.apply( null, d );
+       this.data.groupTotalDuration = totalDuration + maxDiff;
+       this.data.groupPhaseCountDown = totalDuration - Math.min.apply( null, d );
+
+    },
+
+    initTotalPhaseDuration : function(singlePhaseArray){
         var totalDuration = 0;
         var singleCrosssingPhase = singlePhaseArray.disc;
         singleCrosssingPhase.map(function(el){
@@ -53,7 +63,7 @@ var TDGraph = {
         return this.data.totalPhaseDuration;
     },
 
-    setAxisYDivider : function(){
+    initAxisYDivider : function(){
 
         var phase = this.settings.phase;
 
@@ -73,7 +83,13 @@ var TDGraph = {
         return TDGraph.data.axisYDivider;
     },
 
-    setPhaseLineShouldUpdate : function(phaseArray){
+    initPhaseLineShouldUpdate : function(phaseArray){
+        var phaseOperated = [];
+        phaseArray.map(function(el){
+            phaseOperated.push(parseInt(el.operated));
+        })
+        this.data.phaseOperated = phaseOperated; //保存各相位已运行时间
+
         TDGraph.data.phaseLineShouldUpdate = [];
         for(var i=0, l=phaseArray.length; i<l; i++ ){
             TDGraph.data.phaseLineShouldUpdate.push(false);
@@ -166,21 +182,22 @@ var TDGraph = {
     _drawLayers : function(){
 
         var visible = []
+        var phaseArray = this.settings.phase;
 
         for(var i=0; i<3; i++){   //生成3份相位组集合 ，覆盖整个可视区
 
             var crossingGroup = new zrender.Group();
-            var phaseArray = this.settings.phase;
-    
+
             phaseArray.map(function(el){
                 var phaseGroup = TDGraph._drawPhaseGroup(el.disc, el.operated, i-1);
                 var arrowGroup = TDGraph._drawArrowGroup(el.disc, el.operated, i-1);
-                crossingGroup.add(phaseGroup);
+               
                 crossingGroup.add(arrowGroup);
+                crossingGroup.add(phaseGroup);
      
             });
             TDGraph.el.canvas.add(crossingGroup); //添加元素至画布
-
+            //console.log(crossingGroup)
             visible.push(crossingGroup);
             
         }
@@ -193,8 +210,13 @@ var TDGraph = {
 
     _initCurrentPhaseGroup : function(){
         //初始化的当前相位组必为visible第二组
-        var g = TDGraph.getVisiblePhaseGroups();
-        TDGraph.el.currentPhaseGroup = g[1];
+        var g = TDGraph.getVisiblePhaseGroups()[1];
+        g.eachChild(function(el){
+            if(el.isPhase){
+                el.isCurrent = true;
+                TDGraph.el.currentPhaseGroup.push(el);
+            }
+        })
 
     },
 
@@ -235,6 +257,8 @@ var TDGraph = {
 
             phaseAxisX = phaseAxisX + w;
         })
+        // console.log('rect')
+        // console.log(group.getBoundingRect());
         
         group.isPhase = true; //标识一下相位组
 
@@ -260,11 +284,10 @@ var TDGraph = {
                     faceUp = false
                 }
 
-                var x1 = startPos.x - count * totalDuration * unitWidth;
-                var x2 = endPos.x - count * totalDuration * unitWidth;
+                var x1 = startPos.x + count * totalDuration * unitWidth;
+                var x2 = endPos.x + count * totalDuration * unitWidth;
                 var y1 = faceUp? startPos.y + parseInt(TDGraph.settings.phaseWidth) / 2 + 4 : startPos.y - parseInt(TDGraph.settings.phaseWidth) / 2 -4;
                 var y2 = faceUp? endPos.y - parseInt(TDGraph.settings.phaseWidth) / 2 -4 : endPos.y + parseInt(TDGraph.settings.phaseWidth) / 2 +4;
-
                 var line = new zrender.Line({
                     shape : {
                         x1 : x1,
@@ -298,6 +321,9 @@ var TDGraph = {
             }
         })
 
+        // console.log('arrow')
+        // console.log(g.getBoundingRect());
+
         return g;
     },
 
@@ -328,13 +354,94 @@ var TDGraph = {
     },
 
     animate : function(){
+
+        //debugger;
         var g = TDGraph.getVisiblePhaseGroups();
         var updateCycle = parseInt(TDGraph.settings.updateCycle);
         TDGraph.timer = setInterval(function(){
-            TDGraph.updatePhaseOperated(updateCycle);
-            TDGraph.updateGreenPhase();
-            TDGraph.updateVisiblePhaseGroups();
+            // TDGraph.updateGreenPhase();
+            //TDGraph.updateVisiblePhaseGroups();
+            TDGraph.moveAll();
+
+            TDGraph.updateGroupPhaseCountDown();
+            TDGraph.updatePhaseOperated();
+
+            if(TDGraph.data.phaseGroupShouldSwap){
+                TDGraph.swapGroupPhase();
+            }
+
+            var lineNeedUpdate = TDGraph.getPhaseLineShouldUpate();
+            if(lineNeedUpdate){
+               // debugger;
+                TDGraph.swapPhaseLine(lineNeedUpdate);
+            }
+
         }, updateCycle)
+    },
+
+    moveAll : function(){
+        TDGraph.getVisiblePhaseGroups().map(function(el){
+            var x = el.position[0];
+            console.log()
+            el.attr({
+                position : [x - TDGraph.settings.updateCycle / 1000 * TDGraph.data.axisXUnitWidth, 0]
+            })
+        })
+    },
+
+    updateGroupPhaseCountDown : function(){
+        TDGraph.data.groupPhaseCountDown = TDGraph.data.groupPhaseCountDown - TDGraph.settings.updateCycle / 1000;
+        if(TDGraph.data.groupPhaseCountDown <= 0){
+            TDGraph.data.groupPhaseCountDown = TDGraph.data.totalPhaseDuration;
+            TDGraph.data.phaseGroupShouldSwap = true;
+        }
+    },
+
+    swapGroupPhase : function(){
+        var visiblePhaseGroups = this.getVisiblePhaseGroups();
+        var firstGroup = visiblePhaseGroups[0];
+        var x = firstGroup.position[0];
+        var moveWidth = TDGraph.data.totalPhaseDuration * 3 * TDGraph.data.axisXUnitWidth;
+        firstGroup.attr({
+            position : [x + moveWidth, 0]
+        });
+
+        this.el.visiblePhaseGroups.shift();
+        this.el.visiblePhaseGroups.push(firstGroup);
+
+        TDGraph.data.phaseGroupShouldSwap = false;
+    },
+
+    swapPhaseLine : function(lineToUpdate){
+        var updateCount = lineToUpdate.updateCount;
+        var currentLine = this.getCurrentPhaseGroup()[updateCount];
+        var targetCol = targetRow = 0;
+
+        this.getVisiblePhaseGroups().map(function(el, index){
+            var lineCount = 0;
+            el.eachChild(function(item, groupCount){
+                if(item.isPhase){
+                    lineCount ++;
+                }
+                if(item.isCurrent && lineCount === updateCount){
+                    targetCol = index + 1;
+                    targetRow = groupCount;
+                    return false;
+                }
+            });
+        });
+
+        this._clearCurrentLightUp(currentLine);
+
+        var targetLine = this.getVisiblePhaseGroups()[targetCol].childAt(targetRow);
+        targetLine.isCurrent = true;
+
+        
+        this.getCurrentPhaseGroup()[updateCount] = targetLine;
+        this._lightUpCurrentPhaseGroup();
+
+        this.data.phaseLineShouldUpdate[updateCount] = false;
+
     },
 
     getPadding : function(){
@@ -360,16 +467,35 @@ var TDGraph = {
         TDGraph.data.phaseOperated = newOperatedArray;
     },
 
-    updatePhaseOperated : function(updateCycle){
+    updatePhaseOperated : function(){
         var phaseOperated = this.getPhaseOperated();
         var totalPhaseDuration = this.getTotalPhaseDuration()
         phaseOperated.map(function(time, index){
-            phaseOperated[index] = time + updateCycle / 1000;   //对象非引用类型，必须直接修改
+            phaseOperated[index] = time + TDGraph.settings.updateCycle / 1000;   //对象非引用类型，必须直接修改
             if(time >= totalPhaseDuration ){
                 phaseOperated[index] = time - totalPhaseDuration;
                 TDGraph.data.phaseLineShouldUpdate[index] = true;
             }
         });
+    },
+
+    getPhaseLineShouldUpate : function(){
+        var shouldUpdate = false;
+        var result = {
+            updateCount : 0
+        }
+        this.data.phaseLineShouldUpdate.map(function(el, index){
+            if(el){
+                result.updateCount = index;
+                shouldUpdate = true;
+            }
+        });
+
+        if(!shouldUpdate){
+            result = false;
+        }
+
+        return result;
     },
 
     updateGreenPhase : function(){
@@ -406,27 +532,27 @@ var TDGraph = {
         return TDGraph.el.visiblePhaseGroups;
     },
 
-    updateVisiblePhaseGroups : function(updateCycle){
-        var layer = this.getVisiblePhaseGroups();
-        layer.map(function(group, index){
+    // updateVisiblePhaseGroups : function(updateCycle){
+    //     var layer = this.getVisiblePhaseGroups();
+    //     layer.map(function(group, index){
 
-            if(TDGraph.getPhaseLineShouldUpdate()[index]){
-                TDGraph._clearCurrentLightUp();
-                TDGraph.shufflePhaseLine(group);
-                TDGraph.setCurrentPhaseGroup();
-                TDGraph._lightUpCurrentPhaseGroup();
-                TDGraph.getPhaseLineShouldUpdate()[index] = false;
-            }
+    //         if(TDGraph.getPhaseLineShouldUpdate()[index]){
+    //             TDGraph._clearCurrentLightUp();
+    //             TDGraph.shufflePhaseLine(group);
+    //             TDGraph.setCurrentPhaseGroup();
+    //             TDGraph._lightUpCurrentPhaseGroup();
+    //             TDGraph.getPhaseLineShouldUpdate()[index] = false;
+    //         }
 
-            if(TDGraph.getGreenPhaseShouldUpdate()[index]){
-                TDGraph._clearGreenPhase();
-                TDGraph._phaseTurnGreen();
-            }
+    //         if(TDGraph.getGreenPhaseShouldUpdate()[index]){
+    //             TDGraph._clearGreenPhase();
+    //             TDGraph._phaseTurnGreen();
+    //         }
 
-            var operated = TDGraph.getPhaseOperated()[index];
-            TDGraph.updatePhaseLine(line, operated)
-        })
-    },
+    //         var operated = TDGraph.getPhaseOperated()[index];
+    //         TDGraph.updatePhaseLine(line, operated)
+    //     })
+    // },
 
     shufflePhaseLine : function(phaselineGroup){
         var first = phaselineGroup.childAt(0);
@@ -434,27 +560,27 @@ var TDGraph = {
         phaselineGroup.add(first);
     },
 
-    updatePhaseLine : function(phaselineGroup, phaseOperated){   //不要直接进行x坐标推移，会随时间产生误差，要根据已运行时间推算x坐标
-        //console.log(phaselineGroup)
-        var unitWidth = TDGraph.getAxisXUnitWidth();
+    // updatePhaseLine : function(phaselineGroup, phaseOperated){   //不要直接进行x坐标推移，会随时间产生误差，要根据已运行时间推算x坐标
+    //     //console.log(phaselineGroup)
+    //     var unitWidth = TDGraph.getAxisXUnitWidth();
         
-        phaselineGroup.eachChild(function(group, index){
-            var phaseAxisX = TDGraph.getCanvasWidth() / 2 - parseInt(phaseOperated) * unitWidth 
-        + (index - 1) * TDGraph.getTotalPhaseDuration() * unitWidth;
-            group.eachChild(function(el){
-                var x = phaseAxisX;
-                //console.log(x)
-                el.attr({
-                    shape : {
-                        x : x
-                    }
-                })
-                var w = parseInt(el.duration) * unitWidth;
-                phaseAxisX = phaseAxisX + w;
-            })
-        })
+    //     phaselineGroup.eachChild(function(group, index){
+    //         var phaseAxisX = TDGraph.getCanvasWidth() / 2 - parseInt(phaseOperated) * unitWidth 
+    //     + (index - 1) * TDGraph.getTotalPhaseDuration() * unitWidth;
+    //         group.eachChild(function(el){
+    //             var x = phaseAxisX;
+    //             //console.log(x)
+    //             el.attr({
+    //                 shape : {
+    //                     x : x
+    //                 }
+    //             })
+    //             var w = parseInt(el.duration) * unitWidth;
+    //             phaseAxisX = phaseAxisX + w;
+    //         })
+    //     })
 
-    },
+    // },
 
     setCurrentPhaseGroup : function(){
         //当前相位组都是图形数组里的第二组
@@ -471,33 +597,32 @@ var TDGraph = {
 
     _lightUpCurrentPhaseGroup : function(){
 
-        TDGraph.getCurrentPhaseGroup().eachChild(function(el){
-            if(el.isPhase){
-                el.eachChild(function(phase){
-                    //console.log(phase.isArrow)
-                    phase.attr({
-                        style : {
-                            fill : 'red'
-                        }
-                    })
-                });
-            }
+        TDGraph.getCurrentPhaseGroup().map(function(el){
+
+            el.eachChild(function(phase){
+                //console.log(phase.isArrow)
+                phase.attr({
+                    style : {
+                        fill : 'red'
+                    }
+                })
+            });
+
         });
         TDGraph._phaseTurnGreen();
     },
 
-    _clearCurrentLightUp : function(){
+    _clearCurrentLightUp : function(phaseLine){
         TDGraph._clearGreenPhase();
-        TDGraph.getCurrentPhaseGroup().map(function(el){
-            el.eachChild(function(phase){
-                phase.attr({
-                    style : {
-                        fill : 'pink'
-                    }
-                })
-            });
+        phaseLine.isCurrent = null;
+        
+        phaseLine.eachChild(function(phase){
+            phase.attr({
+                style : {
+                    fill : 'pink'
+                }
+            })
         });
-        TDGraph.el.currentPhaseGroup = [];
     },
 
     _clearGreenPhase : function(){
@@ -514,9 +639,9 @@ var TDGraph = {
     },
 
     _phaseTurnGreen(){
-        TDGraph.getCurrentPhaseGroup().eachChild(function(el){
+        TDGraph.getCurrentPhaseGroup().map(function(el){
             var referenceX =  TDGraph.getCanvasWidth() / 2;
-            if(el.isPhase){
+
                 el.eachChild(function(phase){
                     //console.log(phase)
                     if( phase.shape.x <= referenceX && phase.shape.x + phase.shape.width > referenceX ){
@@ -528,7 +653,6 @@ var TDGraph = {
                         TDGraph.el.greenPhase.push(phase);
                     }
                 });
-            } 
         });
     },
 
@@ -552,7 +676,7 @@ var TDGraph = {
         this.initCanvas()
             .setInitData(config.phase)
             .draw()
-            //.animate();
+            .animate();
             
     }
 }
@@ -568,7 +692,7 @@ TDGraph.init({
                 { id:'p003',phaseName : 'south-west', duration : '40' }, 
                 { id:'p004',phaseName : 'west-north', duration : '30' },
             ],
-            operated : '32',
+            operated : '120',
             distance : '200'
         },
         {
@@ -579,7 +703,7 @@ TDGraph.init({
                 { id:'p007', phaseName : 'south-west', duration : '20' }, 
                 { id:'p008', phaseName : 'west-north', duration : '40' },
             ],
-            operated : '62',
+            operated : '130',
             distance : '300'
         },
         {
@@ -590,7 +714,7 @@ TDGraph.init({
                 { id:'p011', phaseName : 'south-west', duration : '30' }, 
                 { id:'p012', phaseName : 'west-north', duration : '30' },
             ],
-            operated : '110',
+            operated : '140',
             distance : '100'
         },
     ],

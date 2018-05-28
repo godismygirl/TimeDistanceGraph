@@ -754,17 +754,7 @@ var TDGraph = {
     },
 
     init : function(config){
-        for(var prop in TDGraph.settings) {
-            if(config[prop]){
-                if(prop === 'color' ){
-                    for(var p in config[color]){
-                        TDGraph.settings.color[p] = config[color][p];
-                    }
-                }
-                TDGraph.settings[prop] = config[prop];
-            }
-        }
-
+        this.settings = zrender.util.merge(TDGraph.settings, config, true)
         this.initCanvas()
             .setInitData(config.phase)
             .draw()
@@ -777,6 +767,9 @@ var TDGraph = {
 var opt = {
     canvasId : 'time-distance-graph',
     title : '测试用时距图',
+    color:{
+        background :'black'
+    },
     phase : [
         {
             crossingName : 'monkey-road',

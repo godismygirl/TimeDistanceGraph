@@ -1,4 +1,3 @@
-
 var TDGraph = {
 
     settings : {
@@ -757,6 +756,11 @@ var TDGraph = {
     init : function(config){
         for(var prop in TDGraph.settings) {
             if(config[prop]){
+                if(prop === 'color' ){
+                    for(var p in config[color]){
+                        TDGraph.settings.color[p] = config[color][p];
+                    }
+                }
                 TDGraph.settings[prop] = config[prop];
             }
         }

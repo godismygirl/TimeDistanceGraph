@@ -269,9 +269,13 @@ var TDGraph = {
 
     getFormatDate : function(){
         var date = new Date();
-        var second = date.getSeconds()
+        var hour = date.getHours();
+        var minute = date.getMinutes();
+        var second = date.getSeconds();
+        hour = hour < 10 ? '0' + hour : hour;
+        minute = minute < 10 ? '0' + minute : minute;
         second = second < 10 ? '0' + second : second;
-        var dateString = date.getHours() + ' : ' + date.getMinutes() + ' : ' + second;
+        var dateString = hour + ' : ' + minute + ' : ' + second;
         return dateString;
     },
 

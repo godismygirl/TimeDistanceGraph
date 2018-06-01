@@ -133,6 +133,7 @@ var TDGraph = {
         this._drawMask();
         this._drawAxis();
         this._drawTitle();
+        this._drawDate();
         return this;
     },
 
@@ -232,6 +233,46 @@ var TDGraph = {
             })
         }
         this.el.canvas.add(titleBox);
+    },
+
+    _drawDate : function(){
+        var p = this.getPadding();
+        var w = this.getCanvasWidth();
+        var h = this.getCanvasHeight();
+
+        var date = new zrender.Rect({
+            shape : {
+                x : 0,
+                y : h - p + 15,
+                width : w,
+                height : TDGraph.settings.titleFontSize
+            },
+            style : {
+                fill : 'none',
+                text : TDGraph.getFormatDate(),
+                textFill : TDGraph.settings.color.title,
+                fontSize : TDGraph.settings.titleFontSize - 4,
+                textAlign : 'center',
+                fontWeight : 500
+            }
+        })
+        this.el.canvas.add(date);
+        this.dateTimer = setInterval(function(){
+            date.attr({
+                style : {
+                    text : TDGraph.getFormatDate()
+                }
+            })
+        }, 1000);
+        
+    },
+
+    getFormatDate : function(){
+        var date = new Date();
+        var second = date.getSeconds()
+        second = second < 10 ? '0' + second : second;
+        var dateString = date.getHours() + ' : ' + date.getMinutes() + ' : ' + second;
+        return dateString;
     },
 
     _drawLayers : function(){
@@ -490,7 +531,7 @@ var TDGraph = {
 
         var g = TDGraph.getAllVisible();
         var updateCycle = parseInt(TDGraph.settings.updateCycle);
-        TDGraph.timer = setInterval(function(){
+        TDGraph.animationTimer = setInterval(function(){
 
             TDGraph.moveAll();
 
@@ -529,7 +570,7 @@ var TDGraph = {
             TDGraph.data.groupPhaseCountDown = TDGraph.data.totalPhaseDuration;
             TDGraph.data.phaseGroupShouldSwap = true;
         }
-        console.log(TDGraph.data.groupPhaseCountDown)
+        //console.log(TDGraph.data.groupPhaseCountDown)
     },
 
     swapGroupPhase : function(){
@@ -746,7 +787,8 @@ var TDGraph = {
     },
 
     reset : function(config){
-        clearInterval(TDGraph.timer);
+        clearInterval(TDGraph.animationTimer);
+        clearInterval(TDGraph.dateTimer);
         TDGraph.el.canvas.clear();
         TDGraph.init(config);
     },

@@ -25,7 +25,7 @@ var TDGraph = {
     el : {},
     data : {},
 
-    setInitData : function(phaseArray){
+    initData : function(phaseArray){
         //求最大相位差 保存相位已运行时间初始值
         this.initAxisYDivider();         //y轴相位绘制坐标
         this.initTotalPhaseDuration(phaseArray[0]);       //路口相位时间总长 t 
@@ -286,9 +286,9 @@ var TDGraph = {
 
         for(var i=0; i<3; i++){   //生成3份相位组集合 ，覆盖整个可视区
             var crossingGroup = new zrender.Group();
-            phaseArray.map(function(el){
-                var phaseGroup = TDGraph._drawPhaseGroup(el.disc, el.operated, i-1);
-                var arrowGroup = TDGraph._drawArrowGroup(el.disc, el.operated, i-1);
+            phaseArray.map(function(el, index){
+                var phaseGroup = TDGraph._drawPhaseGroup(el.disc, el.operated, index, i-1);
+                var arrowGroup = TDGraph._drawArrowGroup(el.disc, i-1);
                 crossingGroup.add(arrowGroup);
                 crossingGroup.add(phaseGroup);
             });
@@ -408,16 +408,19 @@ var TDGraph = {
         
     },
 
-    _drawPhaseGroup: function(phaseGroupArray, phaseOperated, count){
+    _drawPhaseGroup: function(phaseGroupArray, phaseOperated, axisYIndex ,count){
+        
         var group = new zrender.Group();
         var unitWidth = TDGraph.getAxisXUnitWidth();
         var phaseAxisX = TDGraph.getCanvasWidth() / 2 - parseInt(phaseOperated) * unitWidth 
             + count * TDGraph.getTotalPhaseDuration() * unitWidth;
 
+        group.isPhase = true; //标识一下相位组
+           
         phaseGroupArray.map(function(el){
             //console.log(el)
             var x = phaseAxisX;
-            var y = TDGraph.getAxisYByOperated(phaseOperated) - TDGraph.settings.phaseWidth / 2;
+            var y = TDGraph.getAxisYDivider()[axisYIndex] - TDGraph.settings.phaseWidth / 2;
             var w = parseInt(el.duration) * unitWidth;
             var rect = new zrender.Rect({
                 shape : {
@@ -440,11 +443,12 @@ var TDGraph = {
             group.add(rect);
             phaseAxisX = phaseAxisX + w;
         });
-        group.isPhase = true; //标识一下相位组
+        
+        console.log(group);
         return group;
     },
 
-    _drawArrowGroup : function(phaseGroupArray, phaseOperated, count){
+    _drawArrowGroup : function(phaseGroupArray, count){
         
         var allPhase = this.settings.phase;
         var unitWidth = TDGraph.getAxisXUnitWidth();
@@ -456,9 +460,11 @@ var TDGraph = {
         g.isArrow = true;  //标识该group是箭头图形
 
         phaseGroupArray.map(function(el){
-            if(el.pointTo){
+
+            var endPos = TDGraph._computePointTargetPosition(el.pointTo);
+
+            if(el.pointTo && endPos){
                 var startPos = TDGraph._computePointTargetPosition(el.id);
-                var endPos = TDGraph._computePointTargetPosition(el.pointTo);
 
                 if(startPos.x < endPos.x){//箭头朝右
                     faceLeft = false;
@@ -506,29 +512,35 @@ var TDGraph = {
     },
 
     _computePointTargetPosition : function(targetId){
+        var targetExist = false;
         var tagetLineIndex = targetGroupIndex = tagetLineOperated = preTotalW =  w = x = y = 0;
         this.settings.phase.map(function(el, index){
-            el.disc.map(function(item, count){
-                if(item.id === targetId){
+
+            for(var i=0,l=el.disc.length; i<l; i++){
+                if(el.disc[i].id === targetId){
                     tagetLineIndex = index;
-                    targetGroupIndex = count;
-                    w = item.duration;
+                    targetGroupIndex = i;
+                    w = el.disc[i].duration;
+                    targetExist = true;
+                    break;
                 }
-            })
+            }
         });
-        tagetLineOperated = this.getPhaseOperated()[tagetLineIndex];
 
-        for(var i=0; i<targetGroupIndex; i++){
-            preTotalW = preTotalW + parseInt(TDGraph.settings.phase[tagetLineIndex].disc[i].duration);
+        if(targetExist){
+
+            tagetLineOperated = this.getPhaseOperated()[tagetLineIndex];
+            for(var i=0; i<targetGroupIndex; i++){
+                preTotalW = preTotalW + parseInt(TDGraph.settings.phase[tagetLineIndex].disc[i].duration);
+            }
+            x = TDGraph.getCanvasWidth() / 2 + (preTotalW + w / 2 - parseInt(tagetLineOperated)) * TDGraph.getAxisXUnitWidth();
+            y = this.getAxisYDivider()[tagetLineIndex];
+            return {
+                x : x,
+                y : y
+            }
         }
-
-        x = TDGraph.getCanvasWidth() / 2 + (preTotalW + w / 2 - parseInt(tagetLineOperated)) * TDGraph.getAxisXUnitWidth();
-        y = this.getAxisYDivider()[tagetLineIndex];
-
-        return {
-            x : x,
-            y : y
-        }
+        
     },
 
     animate : function(){
@@ -656,17 +668,6 @@ var TDGraph = {
 
     getPadding : function(){
         return parseInt(TDGraph.settings.padding)
-    },
-
-    getAxisYByOperated : function(operatedInt){
-        var index = 0;
-        for(var i=0,l=TDGraph.settings.phase.length; i<l; i++){
-            if( parseInt(TDGraph.settings.phase[i].operated) === parseInt(operatedInt) ){
-                index = i;
-                break;
-            }
-        }
-        return TDGraph.getAxisYDivider()[index];
     },
 
     getPhaseOperated : function(){
@@ -800,7 +801,7 @@ var TDGraph = {
     init : function(config){
         this.settings = zrender.util.merge(TDGraph.settings, config, true)
         this.initCanvas()
-            .setInitData(config.phase)
+            .initData(config.phase)
             .draw()
             .animate();
             

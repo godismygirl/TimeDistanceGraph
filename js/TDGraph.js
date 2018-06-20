@@ -52,7 +52,6 @@ var TDGraph = {
         var maxDiff = Math.max.apply( null, d ) - Math.min.apply( null, d );
         var maxAxisX = this.data.totalPhaseDuration * 2 - maxDiff; 
         //求展示完整相位集的x轴最大时间单位， x轴刻度1s对应的实际像素宽度
-        this.data.groupTotalDuration = totalDuration + maxDiff;
         this.data.groupPhaseCountDown = maxAxisX / 2 - Math.min.apply( null, d );
         this.data.axisXUnitWidth = Math.round(chartWidth / maxAxisX * 1000) / 1000;  //保留3位小数 
 
@@ -560,12 +559,12 @@ var TDGraph = {
 
             var lineNeedUpdate = TDGraph.getPhaseLineShouldUpdate();
             if(lineNeedUpdate){
-                TDGraph.updatePhaseLine(lineNeedUpdate.updateCount);
+                TDGraph.updatePhaseLine(lineNeedUpdate);
             }
 
             var greenPhaseNeedUpdate = TDGraph.getGreenPhaseShouldUpdate();
             if(greenPhaseNeedUpdate){
-               TDGraph.updateGreenPhase(greenPhaseNeedUpdate.updateCount);
+               TDGraph.updateGreenPhase(greenPhaseNeedUpdate);
             }
 
         }, updateCycle)
@@ -586,7 +585,6 @@ var TDGraph = {
             TDGraph.data.groupPhaseCountDown = TDGraph.data.totalPhaseDuration;
             TDGraph.data.phaseGroupShouldSwap = true;
         }
-        //console.log(TDGraph.data.groupPhaseCountDown)
     },
 
     swapGroupPhase : function(){
@@ -610,24 +608,25 @@ var TDGraph = {
     },
 
     updatePhaseLine : function(updateCount){
-        var currentLine = this.getCurrentPhaseGroup()[updateCount];
-        var targetCol = 0;
-        this.getVisiblePhase().map(function(el, index){
-            if(el[updateCount].isCurrent){
-                targetCol = index + 1;
-            }
+        updateCount.forEach(function(i){
+            var currentLine = TDGraph.getCurrentPhaseGroup()[i];
+            var targetCol = 0;
+            TDGraph.getVisiblePhase().map(function(el, index){
+                if(el[i].isCurrent){
+                    targetCol = index + 1;
+                }
+            });
+    
+            TDGraph._clearCurrentLightUp(currentLine);
+    
+            var targetLine = TDGraph.getVisiblePhase()[targetCol][i];
+            targetLine.isCurrent = true;
+    
+            TDGraph.el.currentPhaseGroup[i] = targetLine;
+            TDGraph.el.greenPhase[i] = targetLine.childAt(0);
+            TDGraph._lightUpCurrentPhaseGroup(targetLine);
+            TDGraph.data.phaseLineShouldUpdate[i] = false;
         });
-
-        this._clearCurrentLightUp(currentLine);
-
-        var targetLine = this.getVisiblePhase()[targetCol][updateCount];
-        targetLine.isCurrent = true;
-
-        this.el.currentPhaseGroup[updateCount] = targetLine;
-        this.el.greenPhase[updateCount] = targetLine.childAt(0);
-        this._lightUpCurrentPhaseGroup(targetLine);
-        this.data.phaseLineShouldUpdate[updateCount] = false;
-
     },
 
     _clearCurrentLightUp : function(phaseLine){
@@ -643,11 +642,14 @@ var TDGraph = {
 
     updateGreenPhase : function(updateCount){
         //updateCount 第几行需要更新绿灯
-        var greenIndex = this.data.greenPhaseCycle[updateCount].greenPhaseIndex;
-        this._lightOffGreenPhase(TDGraph.el.greenPhase[updateCount])
-        this.el.greenPhase[updateCount] = this.el.currentPhaseGroup[updateCount].childAt(greenIndex);
-        this._lightUpGreenPhase(TDGraph.el.greenPhase[updateCount]);
-        this.data.greenPhaseShouldUpdate[updateCount] = false;
+        updateCount.forEach(function(i){
+            var greenIndex = TDGraph.data.greenPhaseCycle[i].greenPhaseIndex;
+            TDGraph._lightOffGreenPhase(TDGraph.el.greenPhase[i])
+            TDGraph.el.greenPhase[i] = TDGraph.el.currentPhaseGroup[i].childAt(greenIndex);
+            TDGraph._lightUpGreenPhase(TDGraph.el.greenPhase[i]);
+            TDGraph.data.greenPhaseShouldUpdate[i] = false;
+        })
+        
     },
 
     _lightUpGreenPhase : function(el){
@@ -700,12 +702,10 @@ var TDGraph = {
 
     getPhaseLineShouldUpdate : function(){
         var shouldUpdate = false;
-        var result = {
-            updateCount : 0
-        }
+        var result = [];
         this.data.phaseLineShouldUpdate.map(function(el, index){
             if(el){
-                result.updateCount = index;
+                result.push(index);
                 shouldUpdate = true;
             }
         });
@@ -726,12 +726,10 @@ var TDGraph = {
 
     getGreenPhaseShouldUpdate : function(){
         var shouldUpdate = false;
-        var result = {
-            updateCount : 0
-        }
+        var result = [];
         this.data.greenPhaseShouldUpdate.map(function(el, index){
             if(el){
-                result.updateCount = index;
+                result.push(index);
                 shouldUpdate = true;
             }
         });
